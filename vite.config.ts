@@ -3,7 +3,7 @@ import { defineConfig } from 'vite';
 
 // Cross-origin isolation unlocks SharedArrayBuffer, which ONNX Runtime needs
 // for multi-threaded WASM inference (several times faster on multi-core).
-// Production hosting must send the same headers — see public/_headers and vercel.json.
+// bin/legible.mjs sends the same headers when serving the built app.
 const isolation = {
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Embedder-Policy': 'require-corp',

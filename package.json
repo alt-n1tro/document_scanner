@@ -5,6 +5,7 @@
   "description": "Private, in-browser document scanner: PP-OCRv6 turns PDFs and images into selectable, copyable text.",
   "type": "module",
   "scripts": {
+    "start": "node bin/legible.mjs",
     "prepare-assets": "node scripts/prepare-assets.mjs",
     "dev": "npm run prepare-assets && vite",
     "build": "npm run prepare-assets && tsc --noEmit && vite build",
@@ -27,5 +28,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.1",
     "vitest": "^5.0.3"
+  },
+  "bin": {
+    "legible": "bin/legible.mjs"
   }
 }

@@ -1,6 +1,20 @@
 # Legible
 
-Drop in PDFs and images. Every page is scanned with **PP-OCRv6**, and you get invisible text laid exactly over the printed words. You can select, copy, search (Ctrl/⌘ F) and export text from any scan, like Live Text on macOS. Everything runs in the browser. Files are never uploaded.
+A local tool for getting text out of PDFs and images. Run one command and your browser opens. Pick any number of documents, and every page is scanned with **PP-OCRv6** and gets invisible text laid exactly over the printed words. Select, copy, search (Ctrl/⌘ F) or export it, like Live Text on macOS. Everything runs on your machine.
+
+## Usage
+
+```bash
+npm install      # once
+npm link         # once: puts a `legible` command on your PATH
+legible          # builds if needed, starts a local server, opens the browser
+```
+
+Without `npm link`, run `npm start` from this folder. Press Ctrl+C to quit.
+
+- `legible --no-open` starts the server without opening a browser.
+- `legible --rebuild` forces a rebuild (the launcher also rebuilds on its own when `src/` changed).
+- The port is fixed (5199; override with `PORT=…`), so the browser keeps the models cached between runs.
 
 ## Features
 
@@ -9,7 +23,7 @@ Drop in PDFs and images. Every page is scanned with **PP-OCRv6**, and you get in
 - **Invisible, exact text layer.** Selection highlights sit on the actual glyphs. Double-click selects a word, drag selects lines, and Ctrl/⌘ A selects everything.
 - **Clean copies.** Copied text keeps line breaks, paragraphs, two-column reading order and table rows.
 - **Copy all / Export .txt**, per document or for everything.
-- **Private and offline-capable.** Models are cached on the device after the first visit.
+- **Private and offline.** Models ship with the app and are served from your own machine.
 - **Accurate / Fast modes.** PP-OCRv6 *small* (31 MB) or *tiny* (6 MB). The default is Accurate on desktop and Fast on touch devices.
 - **WebGPU acceleration** when the device has a real GPU. Otherwise multi-threaded WASM SIMD.
 
@@ -29,29 +43,16 @@ On the test fixtures, word edges land within about 1 CSS px (median) of the true
 ## Development
 
 ```bash
-npm install
-npm run dev          # http://localhost:5173
-npm test             # engine accuracy tests (Node, runs the real models)
+npm run dev          # hot-reloading dev server on http://localhost:5173
+npm test             # unit + engine accuracy tests (Node, runs the real models)
 npm run test:e2e     # Playwright end-to-end tests against the production build
-npm run build        # static site in dist/
 ```
 
-`npm run dev`/`build` first run `scripts/prepare-assets.mjs`. That script copies the models into `public/models/` and verifies every model file against a pinned SHA-256. It also copies the pdf.js CMaps, standard fonts and decoders into `public/pdfjs/`. Nothing is loaded from a third-party CDN at runtime.
+`npm run dev` and `npm run build` first run `scripts/prepare-assets.mjs`. That script copies the models into `public/models/` and verifies every model file against a pinned SHA-256. It also copies the pdf.js CMaps, standard fonts and decoders into `public/pdfjs/`. Nothing is loaded from the internet at runtime.
 
-To run the e2e tests with a pre-installed Chromium, set `CHROMIUM_PATH=/path/to/chrome`.
+To run the e2e tests with a pre-installed Chromium, set `CHROMIUM_PATH=/path/to/chrome`. To force the CPU path (for example, to troubleshoot a GPU driver), open the app with `?backend=wasm`.
 
-To force the CPU path (for example, to troubleshoot a GPU driver), open the app with `?backend=wasm`.
-
-## Deploying
-
-`dist/` is a static site. Host it anywhere, **but it must be served with cross-origin isolation headers**. They enable `SharedArrayBuffer`, which multi-threaded inference needs. Without them the app still works, only single-threaded and several times slower.
-
-```
-Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
-```
-
-Ready-made configs are included for Netlify / Cloudflare Pages (`public/_headers`) and Vercel (`vercel.json`). Model files never change for a given hash, so cache them for a long time. The app also keeps a verified copy in Cache Storage.
+The local server sends `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` headers. They enable `SharedArrayBuffer`, which multi-threaded inference needs. If you ever host `dist/` elsewhere, send the same headers.
 
 ## Models
 
