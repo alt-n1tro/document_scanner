@@ -221,3 +221,15 @@ test('PDF resolution is remembered and re-scans open PDFs without moving the tex
   await waitForScans(page, 1);
   expect(await pageWidth()).toBeLessThan(1500);
 });
+
+test('start-screen scanner graphic plays on start and on hover, then rests', async ({ page }) => {
+  await open(page, 'tiny');
+  const sweeping = () => page.locator('.s3 b').evaluate((b) => getComputedStyle(b).animationName === 'art-scan');
+  expect(await sweeping()).toBe(true); // on start
+  await expect.poll(sweeping, { timeout: 10_000 }).toBe(false); // rests after two passes
+
+  await page.hover('#dropcard');
+  await expect.poll(sweeping).toBe(true); // hover
+  await page.mouse.move(5, 5);
+  await expect.poll(sweeping, { timeout: 6_000 }).toBe(false); // finishes the pass, then rests
+});

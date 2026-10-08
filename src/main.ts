@@ -691,6 +691,30 @@ renderDpiControl();
 layout();
 startEngine();
 
+// The start-screen scanner graphic sweeps on start (two passes) and while the card is hovered,
+// then rests. Stopping waits for the current pass to finish so the line never snaps away.
+function setupScanArt() {
+  const art = document.querySelector<HTMLElement>('.dropcard-art');
+  const bar = art?.querySelector<HTMLElement>('.s3 b');
+  if (!art || !bar || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let hovering = false;
+  let startPasses = 2;
+  bar.addEventListener('animationiteration', () => {
+    if (startPasses > 0) startPasses--;
+    if (startPasses === 0 && !hovering) art.classList.remove('scanning');
+  });
+  const card = $('dropcard');
+  card.addEventListener('pointerenter', () => {
+    hovering = true;
+    art.classList.add('scanning');
+  });
+  card.addEventListener('pointerleave', () => {
+    hovering = false;
+  });
+  art.classList.add('scanning');
+}
+setupScanArt();
+
 // Test hook: lets end-to-end tests inspect results without scraping the DOM.
 declare global {
   interface Window {

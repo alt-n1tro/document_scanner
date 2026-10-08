@@ -376,7 +376,9 @@ svg { display: block; }
 .s3 i { display: block; height: 5px; border-radius: 3px; background: var(--line-2); }
 .s3 i:nth-child(2) { width: 80%; }
 .s3 i:nth-child(4) { width: 60%; }
-.s3 b { position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--accent); box-shadow: 0 0 12px 2px rgba(10,132,255,.6); animation: art-scan 2.6s ease-in-out infinite; }
+/* The scan line rests (hidden) and only sweeps while .scanning is set: on start and on hover. */
+.s3 b { position: absolute; left: 0; right: 0; top: 6%; height: 2px; background: var(--accent); box-shadow: 0 0 12px 2px rgba(10,132,255,.6); opacity: 0; transition: opacity .35s ease; }
+.dropcard-art.scanning .s3 b { opacity: 1; animation: art-scan 2.6s ease-in-out infinite; }
 .dropcard:hover .s1 { transform: rotate(-16deg) translate(-6px, 2px); }
 .dropcard:hover .s2 { transform: rotate(16deg) translate(6px, 2px); }
 
