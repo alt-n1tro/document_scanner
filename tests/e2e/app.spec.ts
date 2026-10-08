@@ -182,3 +182,39 @@ test('phone layout fits without horizontal scrolling', async ({ browser }) => {
   expect(tier).toContain('tiny');
   await ctx.close();
 });
+
+test('PDF resolution is remembered and re-scans open PDFs without moving the text', async ({ page }) => {
+  await open(page, 'tiny');
+  await page.setInputFiles('#file-input', fx('report.pdf'));
+  await waitForScans(page, 1);
+
+  const pageWidth = () => page.evaluate(() => window.__legible!.docs()[0].pages[0]?.width ?? 0);
+  const firstWord = () =>
+    page.locator('.text-layer .w', { hasText: /^Quarterly$/ }).first().evaluate((w) => {
+      const r = w.getBoundingClientRect();
+      const pg = w.closest('.page')!.getBoundingClientRect();
+      return { x: r.left - pg.left, y: r.top - pg.top, w: r.width, h: r.height };
+    });
+
+  await expect(page.locator('#dpi-seg button[aria-checked="true"]')).toHaveText('220');
+  const base = await firstWord();
+  expect(await pageWidth()).toBeGreaterThan(1800);
+  expect(await pageWidth()).toBeLessThan(2100);
+
+  // 300 dpi: the open PDF is re-rendered and re-scanned.
+  await page.click('#dpi-seg button[data-dpi="300"]');
+  await page.waitForFunction(() => (window.__legible!.docs()[0].pages[0]?.width ?? 0) > 2500);
+  await expect(page.locator('.text-layer')).toHaveCount(1);
+  const after = await firstWord();
+  // Same word, same place on screen (within a couple of CSS px), whatever the raster size.
+  expect(Math.abs(after.x - base.x)).toBeLessThan(2.5);
+  expect(Math.abs(after.y - base.y)).toBeLessThan(2.5);
+  expect(Math.abs(after.w - base.w)).toBeLessThan(4);
+
+  // Remembered across reloads, and applied to newly opened PDFs.
+  await page.reload();
+  await expect(page.locator('#dpi-seg button[aria-checked="true"]')).toHaveText('300');
+  await page.setInputFiles('#file-input', fx('report.pdf'));
+  await waitForScans(page, 1);
+  expect(await pageWidth()).toBeGreaterThan(2500);
+});

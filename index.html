@@ -56,6 +56,13 @@
               <button role="radio" data-tier="small" title="PP-OCRv6 small — best accuracy, 31 MB one-time download">Accurate</button>
               <button role="radio" data-tier="tiny" title="PP-OCRv6 tiny — faster, 6 MB download">Fast</button>
             </div>
+            <div class="field">
+              <div class="field-label">
+                <span>PDF resolution</span>
+                <span class="field-hint" id="dpi-hint">dpi</span>
+              </div>
+              <div class="seg seg4" id="dpi-seg" role="radiogroup" aria-label="PDF resolution in dpi" title="Higher resolution reads small print better but scans slower. Images are always scanned at their own pixel size."></div>
+            </div>
             <label class="toggle">
               <input type="checkbox" id="show-boxes" />
               <span class="toggle-track"><span></span></span>

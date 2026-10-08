@@ -3,11 +3,14 @@ import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-/** Longest side, in pixels, pages are rasterized/scanned at. */
-const MAX_SIDE = 4096;
-/** PDF pages are rendered at ~220 dpi or at least this long side, whichever is larger. */
-const PDF_MIN_LONG_SIDE = 2200;
-const PDF_DPI = 220;
+/** Longest side, in pixels, a page is ever rasterized/scanned at. */
+export const MAX_SIDE = 5000;
+/** Tiny pages (labels, receipts) are rendered at least this large, whatever the dpi. */
+const PDF_MIN_LONG_SIDE = 1400;
+
+/** Selectable PDF render resolutions (a PDF page is 72 points per inch). */
+export const DPI_OPTIONS = [150, 220, 300, 400] as const;
+export const DEFAULT_DPI = 220;
 
 export interface PageSize {
   width: number;
@@ -21,6 +24,8 @@ export interface SourceDoc {
   pageUrl(index: number): Promise<string>;
   /** A fresh bitmap for OCR; the caller owns (and must close/transfer) it. */
   pageBitmap(index: number): Promise<ImageBitmap>;
+  /** Re-rasterize at a new resolution (PDFs only; images keep their own pixels). */
+  rerender(dpi: number): void;
   destroy(): void;
 }
 
@@ -63,6 +68,7 @@ async function loadImage(file: File): Promise<SourceDoc> {
         imageOrientation: 'from-image',
         ...(scale < 1 ? { resizeWidth: Math.round(width * scale), resizeHeight: Math.round(height * scale), resizeQuality: 'high' as const } : {}),
       }),
+    rerender: () => {},
     destroy: () => URL.revokeObjectURL(url),
   };
 }
@@ -73,7 +79,7 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   );
 }
 
-async function loadPdf(file: File, password?: string): Promise<SourceDoc> {
+async function loadPdf(file: File, password: string | undefined, initialDpi: number): Promise<SourceDoc> {
   const base = new URL('./pdfjs/', document.baseURI).href;
   const task = pdfjs.getDocument({
     data: new Uint8Array(await file.arrayBuffer()),
@@ -95,15 +101,25 @@ async function loadPdf(file: File, password?: string): Promise<SourceDoc> {
     throw new UnsupportedFile('This PDF appears to be damaged and can’t be opened.');
   }
 
-  const scales: number[] = [];
-  const pages: PageSize[] = [];
+  // Page sizes in PDF points; pixel sizes and scales follow the chosen dpi.
+  const points: { w: number; h: number }[] = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const vp = (await pdf.getPage(i)).getViewport({ scale: 1 });
-    const long = Math.max(vp.width, vp.height);
-    const scale = Math.min(MAX_SIDE / long, Math.max(PDF_MIN_LONG_SIDE / long, PDF_DPI / 72));
-    scales.push(scale);
-    pages.push({ width: Math.round(vp.width * scale), height: Math.round(vp.height * scale) });
+    points.push({ w: vp.width, h: vp.height });
   }
+  const scales: number[] = [];
+  const pages: PageSize[] = [];
+  let dpi = 0;
+  const layout = (next: number) => {
+    dpi = next;
+    points.forEach(({ w, h }, i) => {
+      const long = Math.max(w, h);
+      const scale = Math.min(MAX_SIDE / long, Math.max(PDF_MIN_LONG_SIDE / long, dpi / 72));
+      scales[i] = scale;
+      pages[i] = { width: Math.round(w * scale), height: Math.round(h * scale) };
+    });
+  };
+  layout(initialDpi);
 
   // Rendering is serialized: pdf.js rasterizes on the main thread.
   let chain: Promise<unknown> = Promise.resolve();
@@ -152,6 +168,13 @@ async function loadPdf(file: File, password?: string): Promise<SourceDoc> {
     async pageBitmap(index) {
       return createImageBitmap(await render(index));
     },
+    rerender(next) {
+      if (next === dpi) return;
+      layout(next);
+      for (const u of urls.values()) URL.revokeObjectURL(u);
+      urls.clear();
+      blobs.clear();
+    },
     destroy() {
       destroyed = true;
       for (const u of urls.values()) URL.revokeObjectURL(u);
@@ -162,6 +185,6 @@ async function loadPdf(file: File, password?: string): Promise<SourceDoc> {
   };
 }
 
-export function openDocument(file: File, password?: string): Promise<SourceDoc> {
-  return isPdf(file) ? loadPdf(file, password) : loadImage(file);
+export function openDocument(file: File, password?: string, dpi = DEFAULT_DPI): Promise<SourceDoc> {
+  return isPdf(file) ? loadPdf(file, password, dpi) : loadImage(file);
 }

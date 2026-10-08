@@ -1,5 +1,5 @@
 import './styles.css';
-import { PasswordRequired, type SourceDoc, UnsupportedFile, isSupported, openDocument } from './documents';
+import { DEFAULT_DPI, DPI_OPTIONS, PasswordRequired, type SourceDoc, UnsupportedFile, isSupported, openDocument } from './documents';
 import { type EngineState, OcrClient } from './ocr/client';
 import type { ModelTier, OcrPage } from './ocr/types';
 import { buildTextLayer, enableSelectionTracking, pageText, selectedText } from './textlayer';
@@ -46,6 +46,7 @@ let zoom = 1;
 
 const TIER_KEY = 'legible:tier';
 const BOXES_KEY = 'legible:boxes';
+const DPI_KEY = 'legible:dpi';
 const storage = {
   get(k: string) {
     try { return localStorage.getItem(k); } catch { return null; }
@@ -107,6 +108,10 @@ async function writeClipboard(text: string): Promise<boolean> {
 // Default: the accurate model on desktops; the 6 MB fast model on phones
 // and tablets (smaller download, far less CPU). The user's choice sticks.
 const storedTier = storage.get(TIER_KEY);
+const storedDpi = Number(storage.get(DPI_KEY));
+let dpi: number = (DPI_OPTIONS as readonly number[]).includes(storedDpi) ? storedDpi : DEFAULT_DPI;
+/** Bumped when the PDF resolution changes, so scans started at the old one are discarded. */
+let scanEpoch = 0;
 let tier: ModelTier =
   storedTier === 'tiny' || storedTier === 'small' ? storedTier : matchMedia('(pointer: coarse)').matches ? 'tiny' : 'small';
 let engine: OcrClient;
@@ -134,8 +139,9 @@ function startEngine() {
   // ?backend=wasm forces the CPU path (useful for troubleshooting GPU drivers).
   const pref = new URLSearchParams(location.search).get('backend');
   engine = new OcrClient(tier, renderEngineState, pref === 'wasm' || pref === 'webgpu' ? pref : 'auto');
+  renderEngineState(engine.state);
   engine.ready().then(pump, (e: Error) => toast(e.message, 'error'));
-  document.querySelectorAll<HTMLButtonElement>('.seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.tier === tier)));
+  document.querySelectorAll<HTMLButtonElement>('.seg button[data-tier]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.tier === tier)));
 }
 
 // ——— Layout & zoom ———
@@ -238,6 +244,7 @@ async function pump() {
   const page = nextPage();
   if (!page || !page.doc.source) return;
   const gen = generation;
+  const epoch = scanEpoch;
   const client = engine;
   busy = true;
   setStatus(page, 'working');
@@ -251,7 +258,8 @@ async function pump() {
       page.progress = f;
       renderNav(page.doc);
     });
-    if (!page.doc.removed) attachText(page, ocr);
+    // A resolution change mid-scan already requeued this page: drop the stale result.
+    if (!page.doc.removed && epoch === scanEpoch) attachText(page, ocr);
   } catch (e) {
     if (!page.doc.removed) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -425,7 +433,7 @@ async function openDoc(d: Doc) {
   let password: string | undefined;
   for (;;) {
     try {
-      d.source = await openDocument(d.file, password);
+      d.source = await openDocument(d.file, password, dpi);
       break;
     } catch (e) {
       if (e instanceof PasswordRequired) {
@@ -478,9 +486,58 @@ async function openDoc(d: Doc) {
   });
   renderNav(d);
   updateDock();
-  d.source.pageUrl(0).then((url) => {
+  setThumb(d);
+  void pump();
+}
+
+// ——— PDF resolution ———
+
+function renderDpiControl() {
+  const seg = $('dpi-seg');
+  if (!seg.children.length) {
+    for (const v of DPI_OPTIONS) {
+      const b = el('button');
+      b.setAttribute('role', 'radio');
+      b.dataset.dpi = String(v);
+      b.textContent = String(v);
+      b.addEventListener('click', () => applyDpi(v));
+      seg.appendChild(b);
+    }
+  }
+  seg.querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.dpi) === dpi)));
+}
+
+function setThumb(d: Doc) {
+  d.source?.pageUrl(0).then((url) => {
     (d.nav.querySelector('.doc-thumb') as HTMLElement).style.backgroundImage = `url("${url}")`;
   }, () => {});
+}
+
+/** Remembers the resolution and re-scans every open PDF at it. */
+function applyDpi(next: number) {
+  if (next === dpi) return;
+  dpi = next;
+  storage.set(DPI_KEY, String(next));
+  renderDpiControl();
+  const pdfs = docs.filter((d) => d.source?.kind === 'pdf');
+  if (!pdfs.length) return toast(`PDF resolution set to ${next} dpi`);
+  scanEpoch++;
+  for (const d of pdfs) {
+    d.source!.rerender(next);
+    for (const p of d.pages) {
+      p.el.querySelector('.text-layer')?.remove();
+      p.el.querySelector('.page-error')?.remove();
+      p.ocr = undefined;
+      p.progress = 0;
+      p.img.removeAttribute('src');
+      p.img.classList.remove('loaded');
+      setStatus(p, 'queued');
+      if (p.near) void showImage(p);
+    }
+    setThumb(d);
+    renderNav(d);
+  }
+  toast(`Re-scanning PDFs at ${next} dpi`);
   void pump();
 }
 
@@ -542,7 +599,7 @@ $('zoom-in').addEventListener('click', () => setZoom(zoom * 1.2));
 $('zoom-out').addEventListener('click', () => setZoom(zoom / 1.2));
 $('zoom-reset').addEventListener('click', () => setZoom(1));
 
-document.querySelectorAll<HTMLButtonElement>('.seg button').forEach((b) =>
+document.querySelectorAll<HTMLButtonElement>('.seg button[data-tier]').forEach((b) =>
   b.addEventListener('click', () => {
     const t = b.dataset.tier as ModelTier;
     if (t === tier) return;
@@ -630,6 +687,7 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 enableSelectionTracking(docsEl);
+renderDpiControl();
 layout();
 startEngine();
 

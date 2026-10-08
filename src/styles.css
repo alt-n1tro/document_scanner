@@ -164,6 +164,12 @@ svg { display: block; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; padding: 2px; background: var(--line); border-radius: 9px; }
 .seg button { border: 0; background: none; height: 28px; border-radius: 7px; font-size: 12.5px; font-weight: 550; color: var(--text-2); cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; }
 .seg button[aria-checked="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 0 0 .5px var(--line-2); }
+/* A control row: caption above a segmented picker. */
+.field { display: grid; gap: 7px; }
+.field-label { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.field-hint { font-weight: 500; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.seg4 { grid-template-columns: repeat(4, 1fr); }
+.seg4 button { font-variant-numeric: tabular-nums; }
 .toggle { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
 .toggle input { position: absolute; opacity: 0; pointer-events: none; }
 .toggle-track { width: 32px; height: 19px; border-radius: 999px; background: var(--line-2); position: relative; transition: background .2s; flex: none; }

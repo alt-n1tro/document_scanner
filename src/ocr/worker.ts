@@ -9,7 +9,7 @@ const post = (msg: WorkerResponse) => self.postMessage(msg);
 
 // Very large photos are downsampled before OCR; coordinates are reported in
 // the downsampled space and scaled back by the page view.
-const MAX_OCR_SIDE = 4096;
+const MAX_OCR_SIDE = 5000;
 const DET_MAX_SIDE = 2048;
 
 interface ManifestEntry {

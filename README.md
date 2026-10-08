@@ -24,6 +24,7 @@ Without `npm link`, run `npm start` from this folder. Press Ctrl+C to quit.
 - **Clean copies.** Copied text keeps line breaks, paragraphs, two-column reading order and table rows.
 - **Copy all / Export .txt**, per document or for everything.
 - **Private and offline.** Models ship with the app and are served from your own machine.
+- **PDF resolution (150 / 220 / 300 / 400 dpi).** Pick it in the sidebar. The choice is remembered, and changing it re-scans the PDFs you have open. Images are always scanned at their own pixel size. Higher dpi helps with small print and rough scans but scans slower.
 - **Accurate / Fast modes.** PP-OCRv6 *small* (31 MB) or *tiny* (6 MB). The default is Accurate on desktop and Fast on touch devices.
 - **WebGPU acceleration** when the device has a real GPU. Otherwise multi-threaded WASM SIMD.
 
