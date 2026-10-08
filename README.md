@@ -14,7 +14,8 @@ Without `npm link`, run `npm start` from this folder. Press Ctrl+C to quit.
 
 - `legible --no-open` starts the server without opening a browser.
 - `legible --rebuild` forces a rebuild (the launcher also rebuilds on its own when `src/` changed).
-- The port is fixed (5199; override with `PORT=…`), so the browser keeps the models cached between runs.
+- The port is fixed (5199; override with `PORT=…`). If Legible is already running there, `legible` just opens it.
+- **Models are stored locally and never re-downloaded.** They sit on disk in `dist/models/` (built from the pinned packages), and the browser keeps a verified copy in its own storage, so closing and reopening the app loads them straight from there. Browser storage is per address, so keep using the same port. Switching between Accurate and Fast keeps both loaded for instant switching.
 
 ## Features
 

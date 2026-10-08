@@ -1,7 +1,7 @@
 import type { Backend, ModelTier, OcrPage, WorkerRequest, WorkerResponse } from './types';
 
 export type EngineState =
-  | { kind: 'loading'; loaded: number; total: number }
+  | { kind: 'loading'; loaded: number; total: number; cached: boolean }
   | { kind: 'ready'; threads: number; backend: string }
   | { kind: 'error'; message: string };
 
@@ -17,7 +17,7 @@ export class OcrClient {
   private nextId = 1;
   private pending = new Map<number, Pending>();
   private readyPromise: Promise<void>;
-  state: EngineState = { kind: 'loading', loaded: 0, total: 0 };
+  state: EngineState = { kind: 'loading', loaded: 0, total: 0, cached: false };
 
   constructor(
     readonly tier: ModelTier,
@@ -30,7 +30,7 @@ export class OcrClient {
         const msg = e.data;
         switch (msg.type) {
           case 'model-progress':
-            this.set({ kind: 'loading', loaded: msg.loaded, total: msg.total });
+            this.set({ kind: 'loading', loaded: msg.loaded, total: msg.total, cached: msg.cached });
             break;
           case 'ready':
             this.set({ kind: 'ready', threads: msg.threads, backend: msg.backend });
@@ -89,6 +89,12 @@ export class OcrClient {
       this.pending.set(id, { resolve, reject, onProgress });
       this.post({ type: 'ocr', id, bitmap }, [bitmap]);
     });
+  }
+
+  /** Abandons in-flight pages (their late results are ignored) but keeps the engine loaded. */
+  cancelPending() {
+    for (const p of this.pending.values()) p.reject(new Error('cancelled'));
+    this.pending.clear();
   }
 
   dispose() {

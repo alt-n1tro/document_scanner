@@ -53,6 +53,7 @@ const server = createServer((req, res) => {
   res.writeHead(200, {
     'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream',
     // Cross-origin isolation enables multi-threaded OCR.
+    'X-Legible': '1',
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Embedder-Policy': 'require-corp',
     'Cache-Control': file.includes(`${sep}assets${sep}`) || file.includes(`${sep}models${sep}`) ? 'max-age=31536000, immutable' : 'no-cache',
@@ -66,10 +67,29 @@ function openBrowser(url) {
   spawn(cmd, cmdArgs, { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
 }
 
-// A fixed port keeps the browser's model cache warm between runs.
+// A fixed port keeps the browser's model cache warm between runs: browser storage is per address.
 const PORT = Number(process.env.PORT) || 5199;
-server.once('error', (e) => {
+
+async function legibleRunningAt(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1500) });
+    return res.headers.get('x-legible') === '1';
+  } catch {
+    return false;
+  }
+}
+
+server.once('error', async (e) => {
   if (e.code !== 'EADDRINUSE') throw e;
+  const url = `http://127.0.0.1:${PORT}/`;
+  if (await legibleRunningAt(PORT)) {
+    // Already running (e.g. an earlier terminal): just open it, so the saved models are reused.
+    console.log(`\n  Legible is already running at ${url}\n`);
+    if (!args.has('--no-open')) openBrowser(url);
+    setTimeout(() => process.exit(0), 300);
+    return;
+  }
+  console.log(`\n  Port ${PORT} is used by another program, so Legible will use a different port.\n  The browser keeps its saved models per address, so they will be loaded once more there.\n`);
   server.listen(0, '127.0.0.1');
 });
 server.on('listening', () => {

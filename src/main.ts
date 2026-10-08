@@ -122,9 +122,11 @@ function renderEngineState(s: EngineState) {
   box.dataset.state = s.kind;
   if (s.kind === 'loading') {
     const pct = s.total ? Math.round((s.loaded / s.total) * 100) : 0;
-    label.textContent = s.total ? `Downloading text recognition · ${pct}%` : 'Preparing text recognition…';
+    // "Downloading" only when bytes really cross a network; from the browser cache or this machine's own disk it is just loading.
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+    label.textContent = !s.total ? 'Preparing text recognition…' : s.cached || local ? 'Loading text recognition…' : `Downloading text recognition · ${pct}%`;
     $('engine-bar').style.width = `${pct}%`;
-    box.title = 'The PP-OCRv6 model is downloaded once and cached on this device.';
+    box.title = 'The PP-OCRv6 model is stored on this device and only loaded into memory.';
   } else if (s.kind === 'ready') {
     label.textContent = 'Ready · on-device';
     box.title = `PP-OCRv6 ${tier} · ${s.backend === 'webgpu' ? 'WebGPU' : `WASM, ${plural(s.threads, 'thread')}`}`;
@@ -134,13 +136,38 @@ function renderEngineState(s: EngineState) {
   }
 }
 
+/** One engine per model, kept alive after first use so switching back is instant. */
+const engines = new Map<ModelTier, OcrClient>();
+
 function startEngine() {
-  engine?.dispose();
-  // ?backend=wasm forces the CPU path (useful for troubleshooting GPU drivers).
-  const pref = new URLSearchParams(location.search).get('backend');
-  engine = new OcrClient(tier, renderEngineState, pref === 'wasm' || pref === 'webgpu' ? pref : 'auto');
-  renderEngineState(engine.state);
-  engine.ready().then(pump, (e: Error) => toast(e.message, 'error'));
+  // Abandon whatever the previous engine was scanning; the page is requeued by pump().
+  engine?.cancelPending();
+  let client = engines.get(tier);
+  if (!client || client.state.kind === 'error') {
+    client?.dispose();
+    // ?backend=wasm forces the CPU path (useful for troubleshooting GPU drivers).
+    const pref = new URLSearchParams(location.search).get('backend');
+    const created: OcrClient = new OcrClient(
+      tier,
+      (s) => {
+        if (engine === created) renderEngineState(s);
+      },
+      pref === 'wasm' || pref === 'webgpu' ? pref : 'auto',
+    );
+    created.ready().then(
+      () => {
+        if (engine === created) void pump();
+      },
+      (e: Error) => {
+        if (engine === created) toast(e.message, 'error');
+      },
+    );
+    engines.set(tier, created);
+    client = created;
+  }
+  engine = client;
+  renderEngineState(client.state);
+  if (client.state.kind === 'ready') void pump();
   document.querySelectorAll<HTMLButtonElement>('.seg button[data-tier]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.tier === tier)));
 }
 

@@ -28,14 +28,14 @@ async function sha256Hex(buf: ArrayBuffer): Promise<string> {
 }
 
 /** Fetches a model with byte-level progress, caching verified copies in Cache Storage. */
-async function fetchModel(url: string, sha: string, onBytes: (n: number) => void): Promise<ArrayBuffer> {
+async function fetchModel(url: string, sha: string, onBytes: (n: number, fromNetwork: boolean) => void): Promise<ArrayBuffer> {
   const key = `${url}?sha256=${sha}`;
   const cache = 'caches' in self ? await caches.open('legible-models-v1').catch(() => null) : null;
   const hit = await cache?.match(key);
   if (hit) {
     const buf = await hit.arrayBuffer();
     if ((await sha256Hex(buf)) === sha) {
-      onBytes(buf.byteLength);
+      onBytes(buf.byteLength, false);
       return buf;
     }
     await cache?.delete(key);
@@ -50,7 +50,7 @@ async function fetchModel(url: string, sha: string, onBytes: (n: number) => void
     if (done) break;
     chunks.push(value);
     size += value.byteLength;
-    onBytes(value.byteLength);
+    onBytes(value.byteLength, true);
   }
   const bytes = new Uint8Array(size);
   let o = 0;
@@ -96,12 +96,14 @@ async function init(tier: ModelTier, baseUrl: string, pref: Backend) {
   const total = m.det.bytes + m.rec.bytes;
   let loaded = 0;
   let last = 0;
-  const onBytes = (n: number) => {
+  let fromNetwork = false;
+  const onBytes = (n: number, net: boolean) => {
     loaded += n;
+    fromNetwork ||= net;
     const now = performance.now();
     if (now - last > 80 || loaded >= total) {
       last = now;
-      post({ type: 'model-progress', loaded, total });
+      post({ type: 'model-progress', loaded, total, cached: !fromNetwork });
     }
   };
   const [detBuf, recBuf, dict] = await Promise.all([

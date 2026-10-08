@@ -26,7 +26,7 @@ export type WorkerRequest =
   | { type: 'ocr'; id: number; bitmap: ImageBitmap };
 
 export type WorkerResponse =
-  | { type: 'model-progress'; loaded: number; total: number }
+  | { type: 'model-progress'; loaded: number; total: number; cached: boolean }
   | { type: 'ready'; backend: string; threads: number }
   | { type: 'init-error'; message: string }
   | { type: 'page-progress'; id: number; stage: 'detect' | 'recognize'; done: number; total: number }

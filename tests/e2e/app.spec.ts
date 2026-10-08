@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type Page, expect, test } from '@playwright/test';
+import { type Page, chromium, expect, test } from '@playwright/test';
 
 const fx = (name: string) => join(import.meta.dirname, '..', 'fixtures', name);
 
@@ -232,4 +233,77 @@ test('start-screen scanner graphic plays on start and on hover, then rests', asy
   await expect.poll(sweeping).toBe(true); // hover
   await page.mouse.move(5, 5);
   await expect.poll(sweeping, { timeout: 6_000 }).toBe(false); // finishes the pass, then rests
+});
+
+test('switching models never re-downloads, and switching back is instant', async ({ page }) => {
+  const modelRequests: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('.onnx')) modelRequests.push(r.url().split('/').slice(-2).join('/').split('?')[0]);
+  });
+  await page.addInitScript(() => {
+    const w = window as unknown as { __labels: string[] };
+    w.__labels = [];
+    new MutationObserver(() => {
+      const l = document.getElementById('engine-label')?.textContent;
+      if (l && w.__labels[w.__labels.length - 1] !== l) w.__labels.push(l);
+    }).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+  const labels = () => page.evaluate(() => (window as unknown as { __labels: string[] }).__labels);
+  const resetLabels = () => page.evaluate(() => ((window as unknown as { __labels: string[] }).__labels = []));
+  const engineState = () => page.getAttribute('#engine', 'data-state');
+
+  await page.goto('./');
+  await page.setInputFiles('#file-input', fx('report.png')); // the model switch lives in the sidebar
+  await waitForScans(page, 1);
+  expect(modelRequests.sort()).toEqual(['small/det.onnx', 'small/rec.onnx']);
+
+  // First visit to Fast downloads it once.
+  modelRequests.length = 0;
+  await page.click('.seg button[data-tier="tiny"]');
+  await expect(page.locator('#engine')).toHaveAttribute('data-state', 'ready');
+  expect(modelRequests.sort()).toEqual(['tiny/det.onnx', 'tiny/rec.onnx']);
+
+  // Switching back and forth: nothing fetched, and ready the moment the click lands.
+  modelRequests.length = 0;
+  await resetLabels();
+  await page.click('.seg button[data-tier="small"]');
+  expect(await engineState()).toBe('ready');
+  await page.click('.seg button[data-tier="tiny"]');
+  expect(await engineState()).toBe('ready');
+  expect(modelRequests).toEqual([]);
+  expect((await labels()).filter((l) => /Download|Loading|Preparing/.test(l))).toEqual([]);
+
+  // A fresh page load reads the model from the browser cache: it says "Loading", never "Downloading".
+  await page.reload();
+  await expect(page.locator('#engine')).toHaveAttribute('data-state', 'ready');
+  expect(modelRequests).toEqual([]);
+  const seen = await labels();
+  expect(seen.some((l) => /Downloading/.test(l))).toBe(false);
+  expect(seen.some((l) => /Loading text recognition/.test(l))).toBe(true);
+});
+
+test('models are kept on disk across closing and reopening the browser', async ({ baseURL }) => {
+  const profile = mkdtempSync(join(tmpdir(), 'legible-profile-'));
+  const visit = async () => {
+    const ctx = await chromium.launchPersistentContext(profile, process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
+    const page = await ctx.newPage();
+    const models: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('.onnx')) models.push(r.url().split('/').slice(-2).join('/').split('?')[0]);
+    });
+    await page.goto(baseURL!);
+    await expect(page.locator('#engine')).toHaveAttribute('data-state', 'ready', { timeout: 60_000 });
+    const label = await page.textContent('#engine-label');
+    await ctx.close();
+    return { models: models.sort(), label };
+  };
+  try {
+    const first = await visit();
+    expect(first.models).toEqual(['small/det.onnx', 'small/rec.onnx']); // very first run stores them
+    const second = await visit(); // a brand-new browser process on the same profile
+    expect(second.models).toEqual([]);
+    expect(second.label).toBe('Ready · on-device');
+  } finally {
+    rmSync(profile, { recursive: true, force: true });
+  }
 });
