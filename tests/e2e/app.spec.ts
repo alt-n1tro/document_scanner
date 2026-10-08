@@ -196,14 +196,17 @@ test('PDF resolution is remembered and re-scans open PDFs without moving the tex
       return { x: r.left - pg.left, y: r.top - pg.top, w: r.width, h: r.height };
     });
 
-  await expect(page.locator('#dpi-seg button[aria-checked="true"]')).toHaveText('220');
+  await expect(page.locator('#dpi-seg button[aria-checked="true"]')).toHaveText('300');
   const base = await firstWord();
-  expect(await pageWidth()).toBeGreaterThan(1800);
-  expect(await pageWidth()).toBeLessThan(2100);
+  expect(await pageWidth()).toBeGreaterThan(2500);
+  expect(await pageWidth()).toBeLessThan(2800);
 
-  // 300 dpi: the open PDF is re-rendered and re-scanned.
-  await page.click('#dpi-seg button[data-dpi="300"]');
-  await page.waitForFunction(() => (window.__legible!.docs()[0].pages[0]?.width ?? 0) > 2500);
+  // 150 dpi: the open PDF is re-rendered (half the pixels) and re-scanned.
+  await page.click('#dpi-seg button[data-dpi="150"]');
+  await page.waitForFunction(() => {
+    const w = window.__legible!.docs()[0].pages[0]?.width ?? 0;
+    return w > 1100 && w < 1500;
+  });
   await expect(page.locator('.text-layer')).toHaveCount(1);
   const after = await firstWord();
   // Same word, same place on screen (within a couple of CSS px), whatever the raster size.
@@ -213,8 +216,8 @@ test('PDF resolution is remembered and re-scans open PDFs without moving the tex
 
   // Remembered across reloads, and applied to newly opened PDFs.
   await page.reload();
-  await expect(page.locator('#dpi-seg button[aria-checked="true"]')).toHaveText('300');
+  await expect(page.locator('#dpi-seg button[aria-checked="true"]')).toHaveText('150');
   await page.setInputFiles('#file-input', fx('report.pdf'));
   await waitForScans(page, 1);
-  expect(await pageWidth()).toBeGreaterThan(2500);
+  expect(await pageWidth()).toBeLessThan(1500);
 });

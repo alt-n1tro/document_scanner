@@ -5,12 +5,13 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 /** Longest side, in pixels, a page is ever rasterized/scanned at. */
 export const MAX_SIDE = 5000;
-/** Tiny pages (labels, receipts) are rendered at least this large, whatever the dpi. */
-const PDF_MIN_LONG_SIDE = 1400;
-
 /** Selectable PDF render resolutions (a PDF page is 72 points per inch). */
 export const DPI_OPTIONS = [150, 220, 300, 400] as const;
-export const DEFAULT_DPI = 220;
+/**
+ * Rendering a scanned PDF below its scan resolution throws detail away; rendering above it
+ * adds none. 300 covers typical 200-300 dpi scans without being slow on digital PDFs.
+ */
+export const DEFAULT_DPI = 300;
 
 export interface PageSize {
   width: number;
@@ -114,7 +115,7 @@ async function loadPdf(file: File, password: string | undefined, initialDpi: num
     dpi = next;
     points.forEach(({ w, h }, i) => {
       const long = Math.max(w, h);
-      const scale = Math.min(MAX_SIDE / long, Math.max(PDF_MIN_LONG_SIDE / long, dpi / 72));
+      const scale = Math.min(MAX_SIDE / long, dpi / 72);
       scales[i] = scale;
       pages[i] = { width: Math.round(w * scale), height: Math.round(h * scale) };
     });
