@@ -1,0 +1,35 @@
+{
+  "name": "legible",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Private, in-browser document scanner: PP-OCRv6 turns PDFs and images into selectable, copyable text.",
+  "type": "module",
+  "scripts": {
+    "start": "node bin/legible.mjs",
+    "prepare-assets": "node scripts/prepare-assets.mjs",
+    "dev": "npm run prepare-assets && vite",
+    "build": "npm run prepare-assets && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "onnxruntime-web": "^1.30.0",
+    "pdfjs-dist": "^6.3.289"
+  },
+  "devDependencies": {
+    "@arcships/light-ocr-model-ppocrv6-small": "^0.3.4",
+    "@arcships/light-ocr-model-ppocrv6-tiny": "^0.1.0",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.3"
+  },
+  "bin": {
+    "legible": "bin/legible.mjs"
+  }
+}
